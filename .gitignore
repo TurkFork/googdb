@@ -1,6 +1,14 @@
-*.o
-*.gdb
+# Build
 googdb
 obj/
+*.o
 
-.vscode
+# Database files
+*.gdb
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.DS_Store
