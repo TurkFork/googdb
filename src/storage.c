@@ -1,6 +1,8 @@
 #include "storage.h"
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/file.h>
 
 /* ===== XTEA encryption ===== */
 
@@ -107,6 +109,7 @@ gb_storage *gb_open(const char *path)
     if (!db->file) {
         db->file = fopen(path, "w+b");
         if (!db->file) { free(db->path); free(db); return NULL; }
+        setbuf(db->file, NULL);
         db->page_count = 1;
         db->flags = 0;
         db->encrypted = false;
@@ -117,6 +120,7 @@ gb_storage *gb_open(const char *path)
         *(uint32_t *)(dir.data + 4) = 0;
         if (!write_page_data(db, 0, &dir)) { gb_close(db); return NULL; }
     } else {
+        setbuf(db->file, NULL);
         if (!read_header(db)) { gb_close(db); return NULL; }
         db->encrypted = false;
     }
@@ -158,6 +162,21 @@ uint32_t gb_page_alloc(gb_storage *db)
     if (!write_page_data(db, num, &blank)) return UINT32_MAX;
 
     return num;
+}
+
+/* ===== File locking ===== */
+
+void gb_lock(gb_storage *db)
+{
+    int r;
+    do {
+        r = flock(fileno(db->file), LOCK_EX);
+    } while (r < 0 && errno == EINTR);
+}
+
+void gb_unlock(gb_storage *db)
+{
+    flock(fileno(db->file), LOCK_UN);
 }
 
 /* ===== Encryption API ===== */

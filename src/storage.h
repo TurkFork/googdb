@@ -59,6 +59,8 @@ void        gb_close(gb_storage *db);
 bool        gb_page_read(gb_storage *db, uint32_t page_num, gb_page *page);
 bool        gb_page_write(gb_storage *db, uint32_t page_num, const gb_page *page);
 uint32_t    gb_page_alloc(gb_storage *db);
+void        gb_lock(gb_storage *db);
+void        gb_unlock(gb_storage *db);
 
 /* Encryption */
 void gb_encrypt_set(gb_storage *db, const char *password);
