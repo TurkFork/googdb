@@ -4,7 +4,7 @@
 
 int main(void)
 {
-    gb_storage *db = gb_open("test.gb");
+    gb_storage *db = gb_open("test.gdb");
     if (!db) {
         fprintf(stderr, "failed to open database\n");
         return 1;
@@ -19,7 +19,7 @@ int main(void)
     printf("allocated page %u\n", pnum);
 
     gb_page page;
-    const char *msg = "Hello googbase!";
+    const char *msg = "Hello googdb!";
     memcpy(page.data, msg, strlen(msg) + 1);
 
     if (!gb_page_write(db, pnum, &page)) {

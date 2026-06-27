@@ -7,7 +7,7 @@ OBJDIR = obj
 
 SRCS = $(wildcard $(SRCDIR)/*.c)
 OBJS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
-TARGET = googbase
+TARGET = googdb
 
 .PHONY: all clean
 
@@ -23,4 +23,4 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 clean:
-	rm -rf $(OBJDIR) $(TARGET) *.gb
+	rm -rf $(OBJDIR) $(TARGET) *.gdb

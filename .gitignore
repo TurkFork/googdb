@@ -1,4 +1,6 @@
 *.o
-*.gb
-googbase
+*.gdb
+googdb
 obj/
+
+.vscode
