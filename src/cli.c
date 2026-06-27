@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "storage.h"
 
 #define MAX_TOKENS 64
@@ -376,7 +377,11 @@ void run_cli(gb_storage *db, bool show_prompt)
             printf("googdb> ");
             fflush(stdout);
         }
-        if (!fgets(line, sizeof(line), stdin)) break;
+        if (!fgets(line, sizeof(line), stdin)) {
+            if (errno == EINTR) continue;
+            break;
+        }
         if (dispatch(db, line)) break;
+        gb_lock_heartbeat(db);
     }
 }

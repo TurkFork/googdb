@@ -489,5 +489,6 @@ int handle_binary_request(gb_storage *db, int fd, int *done)
         send_error(fd, "unknown opcode");
         break;
     }
+    gb_lock_heartbeat(db);
     return 0;
 }

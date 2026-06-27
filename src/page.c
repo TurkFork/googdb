@@ -2,43 +2,86 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/file.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <time.h>
+
+#define LOCK_TIMEOUT 600
+#define HEARTBEAT_INTERVAL 540
+
+static gb_storage *signal_db;
+
+static void hb_handler(int sig)
+{
+    (void)sig;
+    if (signal_db) {
+        time_t now = time(NULL);
+        FILE *f = fopen(signal_db->lock_path, "we");
+        if (f) {
+            fprintf(f, "%lld\n", (long long)now);
+            fclose(f);
+        }
+        signal_db->last_hb = now;
+    }
+    alarm(HEARTBEAT_INTERVAL);
+}
 
 static bool acquire_lock(gb_storage *db)
 {
-    size_t llen = strlen(db->path) + 6;
-    char *lpath = malloc(llen);
-    if (!lpath) return false;
-    snprintf(lpath, llen, "%s.lock", db->path);
+    struct stat st;
 
-    db->lock_fd = open(lpath, O_WRONLY | O_CREAT, 0666);
-    if (db->lock_fd < 0) { free(lpath); return false; }
-    free(lpath);
-
-    if (flock(db->lock_fd, LOCK_EX | LOCK_NB) < 0) {
-        close(db->lock_fd);
-        db->lock_fd = -1;
-        return false;
+    if (stat(db->lock_path, &st) == 0) {
+        FILE *f = fopen(db->lock_path, "re");
+        if (f) {
+            long long t = 0;
+            if (fscanf(f, "%lld", &t) == 1) {
+                if (time(NULL) - t < LOCK_TIMEOUT) {
+                    fclose(f);
+                    return false;
+                }
+            }
+            fclose(f);
+        }
     }
+
+    FILE *f = fopen(db->lock_path, "we");
+    if (!f) return false;
+    time_t now = time(NULL);
+    fprintf(f, "%lld\n", (long long)now);
+    fclose(f);
+
+    db->last_hb = now;
+    signal_db = db;
+    signal(SIGALRM, hb_handler);
+    alarm(HEARTBEAT_INTERVAL);
+
     return true;
 }
 
 static void release_lock(gb_storage *db)
 {
-    if (db->lock_fd >= 0) {
-        flock(db->lock_fd, LOCK_UN);
-        close(db->lock_fd);
-        db->lock_fd = -1;
-        size_t llen = strlen(db->path) + 6;
-        char *lpath = malloc(llen);
-        if (lpath) {
-            snprintf(lpath, llen, "%s.lock", db->path);
-            unlink(lpath);
-            free(lpath);
-        }
+    signal_db = NULL;
+    alarm(0);
+    signal(SIGALRM, SIG_DFL);
+    if (db->lock_path) {
+        unlink(db->lock_path);
+        free(db->lock_path);
+        db->lock_path = NULL;
     }
+}
+
+void gb_lock_heartbeat(gb_storage *db)
+{
+    time_t now = time(NULL);
+    if (now - db->last_hb < HEARTBEAT_INTERVAL) return;
+
+    FILE *f = fopen(db->lock_path, "we");
+    if (f) {
+        fprintf(f, "%lld\n", (long long)now);
+        fclose(f);
+    }
+    db->last_hb = now;
 }
 
 /* ===== Raw page I/O (no encryption) ===== */
@@ -92,21 +135,25 @@ gb_storage *gb_open(const char *path)
 {
     gb_storage *db = calloc(1, sizeof(gb_storage));
     if (!db) return NULL;
-    db->lock_fd = -1;
 
     db->path = strdup(path);
     if (!db->path) { free(db); return NULL; }
+
+    size_t llen = strlen(path) + 6;
+    db->lock_path = malloc(llen);
+    if (!db->lock_path) { free(db->path); free(db); return NULL; }
+    snprintf(db->lock_path, llen, "%s.lock", path);
 
     FILE *check = fopen(path, "rb");
     bool exists = (check != NULL);
     if (check) fclose(check);
 
     db->file = fopen(path, "r+b");
-    if (!db->file && exists) { free(db->path); free(db); return NULL; }
+    if (!db->file && exists) { gb_close(db); return NULL; }
 
     if (!db->file) {
         db->file = fopen(path, "w+b");
-        if (!db->file) { free(db->path); free(db); return NULL; }
+        if (!db->file) { gb_close(db); return NULL; }
         setbuf(db->file, NULL);
         db->page_count = 1;
         db->flags = 0;
@@ -133,6 +180,7 @@ void gb_close(gb_storage *db)
     release_lock(db);
     if (db->file) fclose(db->file);
     free(db->path);
+    free(db->lock_path);
     free(db);
 }
 
@@ -168,13 +216,10 @@ uint32_t gb_page_alloc(gb_storage *db)
 
 void gb_lock(gb_storage *db)
 {
-    int r;
-    do {
-        r = flock(fileno(db->file), LOCK_EX);
-    } while (r < 0 && errno == EINTR);
+    (void)db;
 }
 
 void gb_unlock(gb_storage *db)
 {
-    flock(fileno(db->file), LOCK_UN);
+    (void)db;
 }
