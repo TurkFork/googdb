@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <time.h>
 
 #define GB_PAGE_SIZE     4096
 #define GB_HEADER_SIZE   16
@@ -51,6 +52,8 @@ typedef struct {
     char     *path;
     bool      encrypted;
     uint32_t  key[4];
+    char     *lock_path;
+    time_t    last_hb;
 } gb_storage;
 
 /* Storage layer */
@@ -61,6 +64,7 @@ bool        gb_page_write(gb_storage *db, uint32_t page_num, const gb_page *page
 uint32_t    gb_page_alloc(gb_storage *db);
 void        gb_lock(gb_storage *db);
 void        gb_unlock(gb_storage *db);
+void        gb_lock_heartbeat(gb_storage *db);
 
 /* Encryption */
 void gb_encrypt_set(gb_storage *db, const char *password);
